@@ -1,29 +1,12 @@
 from flask import Flask, render_template, request
 import pandas as pd
-import sqlite3
-import os
 from sklearn.ensemble import RandomForestRegressor
 import matplotlib.pyplot as plt
+import base64
+from io import BytesIO
+import os
 
 app = Flask(__name__)
-
-# ---------- DATABASE ----------
-def init_db():
-    conn = sqlite3.connect("database.db")
-    c = conn.cursor()
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS students (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        usn TEXT,
-        branch TEXT,
-        score REAL
-    )
-    """)
-    conn.commit()
-    conn.close()
-
-init_db()
 
 # ---------- LOAD DATA ----------
 data = pd.read_csv("student_data.csv")
@@ -35,17 +18,21 @@ model = RandomForestRegressor(n_estimators=200, random_state=42)
 model.fit(X, y)
 
 # ---------- ROUTES ----------
+
 @app.route("/")
 def home():
     return render_template("index.html")
 
+
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
+        # 👇 Student Info
         name = request.form["name"]
         usn = request.form["usn"]
         branch = request.form["branch"]
 
+        # 👇 Academic Inputs
         prev_cgpa = float(request.form["prev_cgpa"])
         prev_sgpa = float(request.form["prev_sgpa"])
         curr_cgpa = float(request.form["curr_cgpa"])
@@ -53,39 +40,42 @@ def predict():
         attendance = float(request.form["attendance"])
         project = float(request.form["project"])
 
-        features = [[prev_cgpa, prev_sgpa, curr_cgpa, curr_sgpa, attendance, project]]
-        prediction = model.predict(features)[0]
+        input_data = pd.DataFrame([{
+            "prev_cgpa": prev_cgpa,
+            "prev_sgpa": prev_sgpa,
+            "curr_cgpa": curr_cgpa,
+            "curr_sgpa": curr_sgpa,
+            "attendance": attendance,
+            "project": project
+        }])
 
-        # Save to DB
-        conn = sqlite3.connect("database.db")
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO students (name, usn, branch, score) VALUES (?, ?, ?, ?)",
-            (name, usn, branch, float(prediction))
-        )
-        conn.commit()
-        conn.close()
+        prediction = model.predict(input_data)[0]
 
-        # Create graph
+        # ---------- GRAPH ----------
+        labels = ["Prev CGPA", "Curr CGPA", "Attendance", "Project", "Predicted"]
+        values = [prev_cgpa, curr_cgpa, attendance/10, project/10, prediction/10]
+
         plt.figure()
-        plt.bar(["Predicted Score"], [prediction])
-        plt.savefig("static/graph.png")
-        plt.close()
+        plt.bar(labels, values)
 
-        return render_template("index.html",
-                            prediction_text=f"Predicted Score: {round(prediction,2)}",
-                            graph="graph.png")
+        img = BytesIO()
+        plt.savefig(img, format='png')
+        img.seek(0)
+
+        graph_url = base64.b64encode(img.getvalue()).decode()
+
+        return render_template(
+            "result.html",
+            prediction=round(prediction, 2),
+            graph_url=graph_url,
+            name=name,
+            usn=usn,
+            branch=branch
+        )
 
     except Exception as e:
         return str(e)
 
-@app.route("/students")
-def students():
-    conn = sqlite3.connect("database.db")
-    df = pd.read_sql_query("SELECT * FROM students", conn)
-    conn.close()
-
-    return render_template("students.html", tables=df.to_dict(orient="records"))
 
 # ---------- RUN ----------
 if __name__ == "__main__":

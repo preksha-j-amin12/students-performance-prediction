@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Result</title>
+</head>
+<body style="text-align:center; font-family: Arial;">
+
+    <h1>Prediction Result</h1>
+
+    <h3>Name: {{ name }}</h3>
+    <h3>USN: {{ usn }}</h3>
+    <h3>Branch: {{ branch }}</h3>
+
+    <h2>Final Score: {{ prediction }}</h2>
+
+    <h3>Performance Graph</h3>
+
+    <img src="data:image/png;base64,{{ graph_url }}" alt="Graph">
+
+    <br><br>
+    <a href="/">Go Back</a>
+
+</body>
+</html>
